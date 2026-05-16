@@ -3,9 +3,17 @@
   "devCommand": "",
   "framework": null,
   "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/api/auth/:path*", "destination": "/api/auth" },
+    { "source": "/api/user/:path*", "destination": "/api/user" },
+    { "source": "/api/problems/:path*", "destination": "/api/problems" },
+    { "source": "/api/reminders/:path*", "destination": "/api/reminders" },
+    { "source": "/api/stats/:path*", "destination": "/api/stats" },
+    { "source": "/api/cron/:path*", "destination": "/api/cron" }
+  ],
   "crons": [
     {
-      "path": "/api/cron/send-reminders",
+      "path": "/api/cron",
       "schedule": "0 0 * * *"
     }
   ]
