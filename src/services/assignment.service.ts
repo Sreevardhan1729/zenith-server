@@ -7,18 +7,25 @@ import { getTodayDateString } from '../utils/timezone';
 import type { Difficulty } from '../types';
 
 export class AssignmentService {
-  async assignDaily(userId: string, clientDate?: string): Promise<IAssignment[]> {
+  async assignDaily(userId: string): Promise<IAssignment[]> {
     const user = await User.findById(userId);
     if (!user) throw new NotFoundError('User not found');
     if (!user.leetcodeUsername || !user.leetcodeVerified) {
       throw new ValidationError('Please link your LeetCode account first');
     }
 
-    const today = clientDate || getTodayDateString(user.settings.timezone);
+    const today = getTodayDateString(user.settings.timezone);
 
+    // Check if there are already assignments for today
     const existing = await Assignment.find({ userId, assignedDate: today }).populate('problemId');
     if (existing.length > 0) {
       return existing;
+    }
+
+    // Also check if there are still-pending assignments from any date (prevent duplicates across devices)
+    const pendingFromAnyDate = await Assignment.find({ userId, status: 'pending' }).populate('problemId');
+    if (pendingFromAnyDate.length > 0) {
+      return pendingFromAnyDate;
     }
 
     const difficulties = this.getDifficulties(
@@ -45,11 +52,11 @@ export class AssignmentService {
     return Assignment.find({ userId, assignedDate: today }).populate('problemId');
   }
 
-  async getToday(userId: string, clientDate?: string): Promise<IAssignment[]> {
+  async getToday(userId: string): Promise<IAssignment[]> {
     const user = await User.findById(userId);
     if (!user) throw new NotFoundError('User not found');
 
-    const today = clientDate || getTodayDateString(user.settings.timezone);
+    const today = getTodayDateString(user.settings.timezone);
 
     // Also check for pending assignments from other dates (carried over or timezone drift)
     const assignments = await Assignment.find({
