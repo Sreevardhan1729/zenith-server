@@ -50,7 +50,24 @@ export class AssignmentService {
     if (!user) throw new NotFoundError('User not found');
 
     const today = clientDate || getTodayDateString(user.settings.timezone);
-    return Assignment.find({ userId, assignedDate: today }).populate('problemId');
+
+    // Also check for pending assignments from other dates (carried over or timezone drift)
+    const assignments = await Assignment.find({
+      userId,
+      $or: [
+        { assignedDate: today },
+        { status: 'pending' },
+      ],
+    }).populate('problemId');
+
+    // Deduplicate by problemId
+    const seen = new Set<string>();
+    return assignments.filter((a) => {
+      const key = a.problemId?.toString() || a._id.toString();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   async markSolved(userId: string, assignmentId: string): Promise<IAssignment> {
@@ -103,14 +120,19 @@ export class AssignmentService {
     page: number = 1,
     limit: number = 30
   ): Promise<{ assignments: IAssignment[]; total: number }> {
+    const user = await User.findById(userId);
+    const today = user ? getTodayDateString(user.settings.timezone) : getTodayDateString('UTC');
+
+    const filter = { userId, assignedDate: { $ne: today }, status: { $ne: 'pending' } };
     const skip = (page - 1) * limit;
+
     const [assignments, total] = await Promise.all([
-      Assignment.find({ userId })
+      Assignment.find(filter)
         .sort({ assignedDate: -1 })
         .skip(skip)
         .limit(limit)
         .populate('problemId'),
-      Assignment.countDocuments({ userId }),
+      Assignment.countDocuments(filter),
     ]);
 
     return { assignments, total };
