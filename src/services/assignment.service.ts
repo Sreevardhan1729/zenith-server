@@ -7,14 +7,14 @@ import { getTodayDateString } from '../utils/timezone';
 import type { Difficulty } from '../types';
 
 export class AssignmentService {
-  async assignDaily(userId: string): Promise<IAssignment[]> {
+  async assignDaily(userId: string, clientDate?: string): Promise<IAssignment[]> {
     const user = await User.findById(userId);
     if (!user) throw new NotFoundError('User not found');
     if (!user.leetcodeUsername || !user.leetcodeVerified) {
       throw new ValidationError('Please link your LeetCode account first');
     }
 
-    const today = getTodayDateString(user.settings.timezone);
+    const today = clientDate || getTodayDateString(user.settings.timezone);
 
     const existing = await Assignment.find({ userId, assignedDate: today }).populate('problemId');
     if (existing.length > 0) {
@@ -45,11 +45,11 @@ export class AssignmentService {
     return Assignment.find({ userId, assignedDate: today }).populate('problemId');
   }
 
-  async getToday(userId: string): Promise<IAssignment[]> {
+  async getToday(userId: string, clientDate?: string): Promise<IAssignment[]> {
     const user = await User.findById(userId);
     if (!user) throw new NotFoundError('User not found');
 
-    const today = getTodayDateString(user.settings.timezone);
+    const today = clientDate || getTodayDateString(user.settings.timezone);
     return Assignment.find({ userId, assignedDate: today }).populate('problemId');
   }
 

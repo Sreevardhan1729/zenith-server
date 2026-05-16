@@ -17,12 +17,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const path = (req.url || '').replace(/^\/api\/problems\/?/, '').split('?')[0];
 
     if (req.method === 'POST' && path === 'assign') {
-      const assignments = await assignmentService.assignDaily(userId);
+      const clientDate = req.body?.date || (req.query.date as string) || undefined;
+      const assignments = await assignmentService.assignDaily(userId, clientDate);
       return res.status(200).json({ success: true, data: { assignments } });
     }
 
     if (req.method === 'GET' && path === 'today') {
-      const assignments = await assignmentService.getToday(userId);
+      const clientDate = (req.query.date as string) || undefined;
+      const assignments = await assignmentService.getToday(userId, clientDate);
       return res.status(200).json({ success: true, data: { assignments } });
     }
 
