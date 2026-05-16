@@ -30,16 +30,16 @@ export class AlfaLeetCodeSource implements ProblemSource {
     const response = await this.client.get('/problems', { params });
     const data = response.data;
 
-    const questions = data.problemsetQuestionList?.questions || data.questions || [];
+    const questions = data.problemsetQuestionList || data.questions || [];
 
     return questions.map((q: any) => ({
-      leetcodeId: parseInt(q.frontendQuestionId, 10),
+      leetcodeId: parseInt(q.questionFrontendId || q.frontendQuestionId || '0', 10),
       titleSlug: q.titleSlug,
       title: q.title,
       difficulty: this.normalizeDifficulty(q.difficulty),
       topicTags: (q.topicTags || []).map((t: any) => t.name || t),
       acRate: q.acRate || 0,
-      isPaidOnly: q.paidOnly || false,
+      isPaidOnly: q.isPaidOnly || q.paidOnly || false,
     }));
   }
 
