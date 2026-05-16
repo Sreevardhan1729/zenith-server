@@ -10,8 +10,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     await connectDB();
 
+    // With [...path].ts, Vercel puts captured segments in req.query.path
+    // Fallback to parsing req.url if query.path is empty
     const pathParam = req.query.path;
-    const path = Array.isArray(pathParam) ? pathParam.join('/') : (pathParam || '');
+    let path: string;
+    if (pathParam && (Array.isArray(pathParam) ? pathParam.length > 0 : pathParam.length > 0)) {
+      path = Array.isArray(pathParam) ? pathParam.join('/') : pathParam;
+    } else {
+      path = (req.url || '').replace(/^\/api\/auth\/?/, '').split('?')[0];
+    }
 
     if (req.method === 'POST' && path === 'register') {
       const { email, password } = validate(registerSchema, req.body);

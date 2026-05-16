@@ -14,7 +14,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userId = (req as AuthenticatedRequest).user!.sub;
     const pathParam = req.query.path;
-    const path = Array.isArray(pathParam) ? pathParam.join('/') : (pathParam || '');
+    let path: string;
+    if (pathParam && (Array.isArray(pathParam) ? pathParam.length > 0 : pathParam.length > 0)) {
+      path = Array.isArray(pathParam) ? pathParam.join('/') : pathParam;
+    } else {
+      path = (req.url || '').replace(/^\/api\/stats\/?/, '').split('?')[0];
+    }
 
     if (req.method === 'GET' && path === 'streak') {
       const streak = await streakService.getStreak(userId);
