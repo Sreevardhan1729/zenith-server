@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { connectDB } from '../src/config/database';
-import { authMiddleware } from '../src/middleware/auth.middleware';
-import { assignmentService } from '../src/services/assignment.service';
-import { streakService } from '../src/services/streak.service';
-import { AppError } from '../src/utils/errors';
-import type { AuthenticatedRequest } from '../src/types/api.types';
+import { connectDB } from '../../src/config/database';
+import { authMiddleware } from '../../src/middleware/auth.middleware';
+import { assignmentService } from '../../src/services/assignment.service';
+import { streakService } from '../../src/services/streak.service';
+import { AppError } from '../../src/utils/errors';
+import type { AuthenticatedRequest } from '../../src/types/api.types';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -14,7 +14,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!authed) return;
 
     const userId = (req as AuthenticatedRequest).user!.sub;
-    const path = (req.url || '').replace(/^\/api\/problems\/?/, '').split('?')[0];
+
+    // Vercel rewrites capture :path* into req.query.path (as array or string)
+    const pathParam = req.query.path;
+    const path = Array.isArray(pathParam) ? pathParam.join('/') : (pathParam || '');
 
     if (req.method === 'POST' && path === 'assign') {
       const assignments = await assignmentService.assignDaily(userId);

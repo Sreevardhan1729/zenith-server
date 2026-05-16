@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { connectDB } from '../src/config/database';
-import { config } from '../src/config';
-import { reminderService } from '../src/services/reminder.service';
+import { connectDB } from '../../src/config/database';
+import { config } from '../../src/config';
+import { reminderService } from '../../src/services/reminder.service';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization;

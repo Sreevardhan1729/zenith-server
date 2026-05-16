@@ -1,16 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { connectDB } from '../src/config/database';
-import { authService } from '../src/services/auth.service';
-import { authMiddleware } from '../src/middleware/auth.middleware';
-import { validate, registerSchema, loginSchema } from '../src/utils/validators';
-import { AppError, ValidationError, NotFoundError } from '../src/utils/errors';
-import type { AuthenticatedRequest } from '../src/types/api.types';
+import { connectDB } from '../../src/config/database';
+import { authService } from '../../src/services/auth.service';
+import { authMiddleware } from '../../src/middleware/auth.middleware';
+import { validate, registerSchema, loginSchema } from '../../src/utils/validators';
+import { AppError, ValidationError, NotFoundError } from '../../src/utils/errors';
+import type { AuthenticatedRequest } from '../../src/types/api.types';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     await connectDB();
 
-    const path = (req.url || '').replace(/^\/api\/auth\/?/, '').split('?')[0];
+    const pathParam = req.query.path;
+    const path = Array.isArray(pathParam) ? pathParam.join('/') : (pathParam || '');
 
     if (req.method === 'POST' && path === 'register') {
       const { email, password } = validate(registerSchema, req.body);
