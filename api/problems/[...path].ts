@@ -15,6 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userId = (req as AuthenticatedRequest).user!.sub;
 
+    // Extract path from catch-all route param or URL
     const pathParam = req.query.path;
     let path: string;
     if (pathParam && (Array.isArray(pathParam) ? pathParam.length > 0 : pathParam.length > 0)) {
@@ -23,17 +24,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       path = (req.url || '').replace(/^\/api\/problems\/?/, '').split('?')[0];
     }
 
+    // POST /problems/assign
     if (req.method === 'POST' && path === 'assign') {
       const assignments = await assignmentService.assignDaily(userId);
       return res.status(200).json({ success: true, data: { assignments } });
     }
 
+    // GET /problems/today
     if (req.method === 'GET' && path === 'today') {
       const assignments = await assignmentService.getToday(userId);
       return res.status(200).json({ success: true, data: { assignments } });
     }
 
-    if (req.method === 'GET' && path === 'history') {
+    // GET /problems/history
+    if (req.method === 'GET' && (path === 'history' || path.startsWith('history'))) {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 30;
       const { assignments, total } = await assignmentService.getHistory(userId, page, limit);
@@ -43,29 +47,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Handle /problems/:id/solve, /problems/:id/skip, /problems/:id/carry-over
-    const idMatch = path.match(/^([a-f0-9]{24})\/(solve|skip|carry-over)$/);
-    if (req.method === 'POST' && idMatch) {
-      const [, assignmentId, action] = idMatch;
+    // POST /problems/:id/solve or /problems/:id/skip or /problems/:id/carry-over
+    if (req.method === 'POST') {
+      const segments = path.split('/');
+      if (segments.length === 2) {
+        const [assignmentId, action] = segments;
 
-      if (action === 'solve') {
-        const assignment = await assignmentService.markSolved(userId, assignmentId);
-        await streakService.updateStreak(userId);
-        return res.status(200).json({ success: true, data: { assignment } });
-      }
+        if (action === 'solve') {
+          const assignment = await assignmentService.markSolved(userId, assignmentId);
+          await streakService.updateStreak(userId);
+          return res.status(200).json({ success: true, data: { assignment } });
+        }
 
-      if (action === 'skip') {
-        const assignment = await assignmentService.markSkipped(userId, assignmentId);
-        return res.status(200).json({ success: true, data: { assignment } });
-      }
+        if (action === 'skip') {
+          const assignment = await assignmentService.markSkipped(userId, assignmentId);
+          return res.status(200).json({ success: true, data: { assignment } });
+        }
 
-      if (action === 'carry-over') {
-        const assignment = await assignmentService.carryOver(userId, assignmentId);
-        return res.status(200).json({ success: true, data: { assignment } });
+        if (action === 'carry-over') {
+          const assignment = await assignmentService.carryOver(userId, assignmentId);
+          return res.status(200).json({ success: true, data: { assignment } });
+        }
       }
     }
 
-    return res.status(404).json({ success: false, error: 'Not found' });
+    return res.status(404).json({ success: false, error: `Not found: ${req.method} ${path}` });
   } catch (error) {
     if (error instanceof AppError) {
       return res.status(error.statusCode).json({ success: false, error: error.message });

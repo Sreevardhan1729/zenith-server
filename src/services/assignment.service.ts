@@ -22,10 +22,15 @@ export class AssignmentService {
       return existing;
     }
 
-    // Also check if there are still-pending assignments from any date (prevent duplicates across devices)
-    const pendingFromAnyDate = await Assignment.find({ userId, status: 'pending' }).populate('problemId');
-    if (pendingFromAnyDate.length > 0) {
-      return pendingFromAnyDate;
+    // Check if there are still-pending assignments from previous days
+    const pendingFromOtherDays = await Assignment.find({
+      userId,
+      status: 'pending',
+      assignedDate: { $ne: today },
+    }).populate('problemId');
+
+    if (pendingFromOtherDays.length > 0) {
+      return pendingFromOtherDays;
     }
 
     const difficulties = this.getDifficulties(
@@ -34,18 +39,15 @@ export class AssignmentService {
       user.settings.mixRatio
     );
 
-    const assignments: IAssignment[] = [];
-
     for (const difficulty of difficulties) {
       const problem = await this.pickProblem(userId, difficulty);
       if (problem) {
-        const assignment = await Assignment.create({
+        await Assignment.create({
           userId,
           problemId: problem._id,
           assignedDate: today,
           status: 'pending',
         });
-        assignments.push(assignment);
       }
     }
 
@@ -58,7 +60,7 @@ export class AssignmentService {
 
     const today = getTodayDateString(user.settings.timezone);
 
-    // Also check for pending assignments from other dates (carried over or timezone drift)
+    // Return today's assignments (all statuses) + any pending from other days
     const assignments = await Assignment.find({
       userId,
       $or: [
@@ -67,19 +69,16 @@ export class AssignmentService {
       ],
     }).populate('problemId');
 
-    // Deduplicate by problemId
-    const seen = new Set<string>();
-    return assignments.filter((a) => {
-      const key = a.problemId?.toString() || a._id.toString();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    return assignments;
   }
 
   async markSolved(userId: string, assignmentId: string): Promise<IAssignment> {
     const assignment = await Assignment.findOne({ _id: assignmentId, userId });
     if (!assignment) throw new NotFoundError('Assignment not found');
+
+    if (assignment.status === 'solved') {
+      return assignment;
+    }
 
     assignment.status = 'solved';
     assignment.solvedAt = new Date();
@@ -127,10 +126,7 @@ export class AssignmentService {
     page: number = 1,
     limit: number = 30
   ): Promise<{ assignments: IAssignment[]; total: number }> {
-    const user = await User.findById(userId);
-    const today = user ? getTodayDateString(user.settings.timezone) : getTodayDateString('UTC');
-
-    const filter = { userId, assignedDate: { $ne: today }, status: { $ne: 'pending' } };
+    const filter = { userId, status: { $in: ['solved', 'skipped', 'carried_over'] } };
     const skip = (page - 1) * limit;
 
     const [assignments, total] = await Promise.all([
@@ -150,47 +146,53 @@ export class AssignmentService {
   }
 
   private async pickProblem(userId: string, difficulty: Difficulty): Promise<IProblem | null> {
-    const previousSlugs = await Assignment.find({ userId })
-      .distinct('problemId')
-      .then(async (ids) => {
-        const problems = await Problem.find({ _id: { $in: ids } });
-        return problems.map((p) => p.titleSlug);
-      });
+    // Get all problem IDs already assigned to this user
+    const assignedProblemIds = await Assignment.find({ userId }).distinct('problemId');
 
-    let problem = await Problem.findOne({
-      difficulty,
-      titleSlug: { $nin: previousSlugs },
-      isPaidOnly: false,
-    });
+    // Always fetch fresh problems from the API to ensure randomness per user
+    const source = await problemSourceFactory.getActiveSource();
+    // Use a random skip to get different problems for different users
+    const randomSkip = Math.floor(Math.random() * 200);
+    const fetched = await source.fetchProblems({ difficulty, limit: 50, skip: randomSkip });
 
-    if (!problem) {
-      const source = await problemSourceFactory.getActiveSource();
-      const fetched = await source.fetchProblems({ difficulty, limit: 50 });
+    // Get slugs of problems already assigned to this user
+    const assignedProblems = await Problem.find({ _id: { $in: assignedProblemIds } });
+    const assignedSlugs = new Set(assignedProblems.map((p) => p.titleSlug));
 
-      const newProblems = fetched.filter((p) => !previousSlugs.includes(p.titleSlug) && !p.isPaidOnly);
+    // Filter to problems not yet assigned to this user
+    const available = fetched.filter((p) => !assignedSlugs.has(p.titleSlug) && !p.isPaidOnly);
 
-      if (newProblems.length === 0) return null;
-
-      const randomPick = newProblems[Math.floor(Math.random() * newProblems.length)];
-
-      problem = await Problem.findOneAndUpdate(
-        { titleSlug: randomPick.titleSlug },
-        {
-          leetcodeId: randomPick.leetcodeId,
-          titleSlug: randomPick.titleSlug,
-          title: randomPick.title,
-          difficulty: randomPick.difficulty,
-          topicTags: randomPick.topicTags,
-          acRate: randomPick.acRate,
-          isPaidOnly: randomPick.isPaidOnly,
-          sourceApi: source.sourceId,
-          lastFetchedAt: new Date(),
-        },
-        { upsert: true, new: true }
-      );
+    if (available.length === 0) {
+      // Try without skip as fallback
+      const fallback = await source.fetchProblems({ difficulty, limit: 100 });
+      const fallbackAvailable = fallback.filter((p) => !assignedSlugs.has(p.titleSlug) && !p.isPaidOnly);
+      if (fallbackAvailable.length === 0) return null;
+      const pick = fallbackAvailable[Math.floor(Math.random() * fallbackAvailable.length)];
+      return this.upsertProblem(pick, source.sourceId);
     }
 
-    return problem;
+    // Pick a random problem from available ones
+    const randomPick = available[Math.floor(Math.random() * available.length)];
+    return this.upsertProblem(randomPick, source.sourceId);
+  }
+
+  private async upsertProblem(problemData: any, sourceId: string): Promise<IProblem | null> {
+    const result = await Problem.findOneAndUpdate(
+      { titleSlug: problemData.titleSlug },
+      {
+        leetcodeId: problemData.leetcodeId,
+        titleSlug: problemData.titleSlug,
+        title: problemData.title,
+        difficulty: problemData.difficulty,
+        topicTags: problemData.topicTags,
+        acRate: problemData.acRate,
+        isPaidOnly: problemData.isPaidOnly,
+        sourceApi: sourceId,
+        lastFetchedAt: new Date(),
+      },
+      { upsert: true, new: true }
+    );
+    return result;
   }
 
   private getDifficulties(
