@@ -1,16 +1,18 @@
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { format } from 'date-fns';
 
-export function getCurrentTimeInTimezone(timezone: string): Date {
-  return toZonedTime(new Date(), timezone);
+const IST = 'Asia/Kolkata';
+
+export function getCurrentTimeInTimezone(timezone?: string): Date {
+  return toZonedTime(new Date(), IST);
 }
 
-export function getTodayDateString(timezone: string): string {
-  return formatInTimeZone(new Date(), timezone, 'yyyy-MM-dd');
+export function getTodayDateString(timezone?: string): string {
+  return formatInTimeZone(new Date(), IST, 'yyyy-MM-dd');
 }
 
-export function getCurrentHHMM(timezone: string): string {
-  return formatInTimeZone(new Date(), timezone, 'HH:mm');
+export function getCurrentHHMM(timezone?: string): string {
+  return formatInTimeZone(new Date(), IST, 'HH:mm');
 }
 
 export function isWithinWindow(currentHHMM: string, targetHHMM: string, windowMinutes: number): boolean {
