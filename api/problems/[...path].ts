@@ -47,28 +47,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // POST /problems/:id/solve or /problems/:id/skip or /problems/:id/carry-over
-    if (req.method === 'POST') {
-      const segments = path.split('/');
-      if (segments.length === 2) {
-        const [assignmentId, action] = segments;
+    // POST /problems/solve, /problems/skip, /problems/carry-over (ID in body)
+    if (req.method === 'POST' && path === 'solve') {
+      const { assignmentId } = req.body || {};
+      if (!assignmentId) return res.status(400).json({ success: false, error: 'assignmentId required' });
+      const assignment = await assignmentService.markSolved(userId, assignmentId);
+      await streakService.updateStreak(userId);
+      return res.status(200).json({ success: true, data: { assignment } });
+    }
 
-        if (action === 'solve') {
-          const assignment = await assignmentService.markSolved(userId, assignmentId);
-          await streakService.updateStreak(userId);
-          return res.status(200).json({ success: true, data: { assignment } });
-        }
+    if (req.method === 'POST' && path === 'skip') {
+      const { assignmentId } = req.body || {};
+      if (!assignmentId) return res.status(400).json({ success: false, error: 'assignmentId required' });
+      const assignment = await assignmentService.markSkipped(userId, assignmentId);
+      return res.status(200).json({ success: true, data: { assignment } });
+    }
 
-        if (action === 'skip') {
-          const assignment = await assignmentService.markSkipped(userId, assignmentId);
-          return res.status(200).json({ success: true, data: { assignment } });
-        }
-
-        if (action === 'carry-over') {
-          const assignment = await assignmentService.carryOver(userId, assignmentId);
-          return res.status(200).json({ success: true, data: { assignment } });
-        }
-      }
+    if (req.method === 'POST' && path === 'carry-over') {
+      const { assignmentId } = req.body || {};
+      if (!assignmentId) return res.status(400).json({ success: false, error: 'assignmentId required' });
+      const assignment = await assignmentService.carryOver(userId, assignmentId);
+      return res.status(200).json({ success: true, data: { assignment } });
     }
 
     return res.status(404).json({ success: false, error: `Not found: ${req.method} ${path}` });
